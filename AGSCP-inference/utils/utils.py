@@ -39,11 +39,7 @@ def init_seeds(seed=0):
 
 
 def load_classes(path):
-    """
-    根据类别名称文件解析出类别，存储在列表中
-    :param path: 类别名称文件路径
-    :return: 得到类别名列表: ['person', 'bicycle'...]
-    """
+
     # Loads *.names file at 'path'
     with open(path, 'r') as f:
         names = f.read().split('\n')
@@ -78,8 +74,7 @@ def xyxy2xywh(x):
 
 
 def xywh2xyxy(x):
-    # 由center_x center_y width height转为左上角右下角xmin, ymin, xmax, ymax
-    # Convert bounding box format from [x, y, w, h] to [x1, y1, x2, y2]
+
     y = torch.zeros_like(x) if isinstance(x, torch.Tensor) else np.zeros_like(x)
     y[:, 0] = x[:, 0] - x[:, 2] / 2
     y[:, 1] = x[:, 1] - x[:, 3] / 2
@@ -155,48 +150,25 @@ def wh_iou(box1, box2):
 
 
 def non_max_suppression(prediction, conf_thres=0.5, nms_thres=0.5):
-    """
-    剔除物体置信度得分object confidence score低于'conf_thres'阈值的检测框
-    再利用NMS进一步过滤筛选检测框
-    :param prediction: 处理后的YOLO预测，相对于原图 torch.Size([1, 8190, 85])
-    :param conf_thres: 置信度阈值
-    :param nms_thres:  NMS阈值
-    :return: Returns detections with shape:(x1, y1, x2, y2, object_conf, class_conf, class)
-    """
+
 
     min_wh = 5  # (pixels) minimum box width and height
 
     output = [None] * len(prediction)
     for image_i, pred in enumerate(prediction):
-        # x, y, w, h = pred[:, 0], pred[:, 1], pred[:, 2], pred[:, 3]
-        # Conf = pred[:, 4]
-        # Cls pred = pred[:, 5:]
 
-        # Multiply conf by class conf to get combined confidence
-        # axis = 1 时为行方向的最值，也就是求每个预测框类别得分最高的分数
-        # class_conf:每个预测框概率最高的那个类别的得分 torch.Size([8190])
-        # class_pred:每个预测框概率最高的那个类别       torch.Size([8190])
         class_conf, class_pred = pred[:, 5:].max(1)
-        # 对于测试阶段来说，网络直接输出 Pr(class/object)，就已经可以代表有物体存在的条件下类别概率。
-        # 但是在测试阶段，作者还把这个概率乘上了confidence。
-        # improves mAP from 0.549 to 0.551
+
         pred[:, 4] *= class_conf
 
-        # Select only suitable predictions
-        # 1.pred[:, 4] > conf_thres: 保留置信度阈值大于阈值的预测框
-        # 2.(pred[:, 2:4] > min_wh).all(1) > min_wh: 保留w,h > min_wh = 2的预测框，太小的忽略不计
-        # 3.torch.isfinite(pred).all(1): 保留预测值都正常的
-        # torch.isfinite(pred) 返回一个新的张量，其布尔元素表示每个元素是否为+/-INF,是INF NAN则返回0
         i = (pred[:, 4] > conf_thres) & (pred[:, 2:4] > min_wh).all(1) & torch.isfinite(pred).all(1)
-        pred = pred[i] # 经过NMS，只剩下29个预测框 torch.Size([29, 85])
+        pred = pred[i]
 
         # If none are remaining => process next image
         if len(pred) == 0:
             continue
 
-        # Select predicted classes
-        # 进行NMS时，使用的是类别概率乘以confidence
-        # 这里选择类别只用类别概率
+
         class_conf = class_conf[i]
         class_pred = class_pred[i].unsqueeze(1).float()
 
@@ -204,64 +176,52 @@ def non_max_suppression(prediction, conf_thres=0.5, nms_thres=0.5):
         pred[:, :4] = xywh2xyxy(pred[:, :4]) # torch.Size([29, 85])
 
         # Detections ordered as (x1y1x2y2, obj_conf, class_conf, class_pred)
-        pred = torch.cat((pred[:, :5], class_conf.unsqueeze(1), class_pred), 1) # 通过这样NMS后，只剩下29个框torch.Size([29, 7])
+        pred = torch.cat((pred[:, :5], class_conf.unsqueeze(1), class_pred), 1) 
 
-        # Get detections sorted by decreasing confidence scores
-        # 对于剩下的预测框安装置信度(类别概率乘以confidence)得分进行排序
+
         pred = pred[(-pred[:, 4]).argsort()]
 
         det_max = []
-        ############# NMS方法选择 #############
-        """
-        'OR'   : 一般说的NMS都是OR方式
-        'AND'  : 这个与OR整体类似，不同在于如果出现这个类别只有一个框，则认为无效。
-                 可能是一般一个物体都会对应多个框，只有一个很有可能是误检了
-        'MERGE': 综合利用了高于阈值的预测框，对于每个预测框的conf值来赋予权重，
-                 然后求得x1y1x2y2的坐标的加权平均作为最后的预测框 
-                 weighted mixture box精度更高，但速度较慢一些.
-        'SOFT' : soft-NMS https://arxiv.org/abs/1704.04503
-        """
+
         nms_style = 'MERGE'  # 'OR' (default), 'AND', 'MERGE' (experimental), 'SOFT'
-        for c in pred[:, -1].unique():   # 没有80类一个个遍历，更高效
-            dc = pred[pred[:, -1] == c]  # select class c torch.Size([21, 7]) 代表这个类别有21个预测框
-            n = len(dc) # 当前类别有len(dc)=21个预测框
+        for c in pred[:, -1].unique():  
+            dc = pred[pred[:, -1] == c] 
+            n = len(dc) 
             if n == 1:
                 det_max.append(dc)  # No NMS required if only 1 prediction
                 continue
             elif n > 100:
-                # 框太多只保留前100，一般情况下是OK的，不过密集场景可能得改一下
+    
                 dc = dc[:100]  # limit to first 100 boxes: https://github.com/ultralytics/yolov3/issues/117
 
             # Non-maximum suppression
             if nms_style == 'OR':  # default
-                # torch.Size([21, 7]) 开始时21个框
-                # dc.shape[0]也就是预测框的数目，如果预测框数目为0，则退出循环
+
                 while dc.shape[0]: # 21->14->9->3->0
-                    det_max.append(dc[:1])  # 保留conf最高的预测框 4
-                    if len(dc) == 1:  # 如果只剩下一个预测框了，退出循环
+                    det_max.append(dc[:1])  
+                    if len(dc) == 1:
                         break
-                    iou = bbox_iou(dc[0], dc[1:]) # 计算conf得分最高的预测框与其他框的IoU
-                    dc = dc[1:][iou < nms_thres]  # 移除与当前conf得分最高的预测框IoU大于阈值的预测框 remove ious > threshold
+                    iou = bbox_iou(dc[0], dc[1:]) 
+                    dc = dc[1:][iou < nms_thres]  
 
             elif nms_style == 'AND':  # requires overlap, single boxes erased
                 while len(dc) > 1:    # 21->14->9->3->0
-                    # 计算得分最高的预测框与其他框的IoU
-                    iou = bbox_iou(dc[0], dc[1:])  # iou with other boxes dc[1:]: torch.Size([20])
-                    if iou.max() > 0.5:            # 与当前conf得分最高的预测框IoU最大的如果大于0.5
-                        det_max.append(dc[:1])     # 那么就将conf得分最高的预测框加入最终的det_max
-                    dc = dc[1:][iou < nms_thres]   # remove ious > threshold
 
-            elif nms_style == 'MERGE':  # weighted mixture box 默认采用，精度更高，但速度较慢一些
+                    iou = bbox_iou(dc[0], dc[1:]) 
+                    if iou.max() > 0.5:           
+                        det_max.append(dc[:1])  
+                    dc = dc[1:][iou < nms_thres]  
+
+            elif nms_style == 'MERGE':  
                 while len(dc):
                     if len(dc) == 1:
                         det_max.append(dc)
                         break
-                    i = bbox_iou(dc[0], dc) > nms_thres  # 取大于NMS阈值的框
-                    weights = dc[i, 4:5]      # 取出iou大于NMS阈值的框求得这些框的conf值作为weights torch.Size([7, 1])
+                    i = bbox_iou(dc[0], dc) > nms_thres 
+                    weights = dc[i, 4:5] 
                     dc[0, :4] = (weights * dc[i, :4]).sum(0) / weights.sum()
                     det_max.append(dc[:1])
-                    dc = dc[i == 0] # 这一步也就是进行了筛选
-
+                    dc = dc[i == 0]
             elif nms_style == 'SOFT':  # soft-NMS https://arxiv.org/abs/1704.04503
                 sigma = 0.5  # soft-nms sigma parameter
                 while len(dc):

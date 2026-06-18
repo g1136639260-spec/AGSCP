@@ -40,37 +40,28 @@ def exif_size(img):
 
 class LoadImages:  # for inference
     def __init__(self, path, img_size=416, half=False):
-        """
-        进行推理的图像预处理
-        :param path: 需要检测的图片文件夹 'data/samples'
-        :param img_size: 416
-        :param half: 是否采用半精度推理 False
-        """
+
         path = str(Path(path))  # os-agnostic
         files = []
         if os.path.isdir(path):
-            # files：列表，包含了待检测的图片路径[图片1，图片2...]
-            # 'data\\samples\\bus.jpg'
-            # 'data\\samples\\zidane.jpg'
+
             files = sorted(glob.glob(os.path.join(path, '*.*')))
         elif os.path.isfile(path):
             files = [path]
 
-        # os.path.splitext(“文件路径”)    分离文件名与扩展名；默认返回(fname,fextension)元组，可做分片操作
-        # os.path.splitext(x): ('data\\samples\\bus', '.jpg')
-        # os.path.splitext(x)[-1].lower(): '.jpg'
-        images = [x for x in files if os.path.splitext(x)[-1].lower() in img_formats] # 判断是否是支持的图片格式
-        videos = [x for x in files if os.path.splitext(x)[-1].lower() in vid_formats] # 判断是否是支持的视频格式
+
+        images = [x for x in files if os.path.splitext(x)[-1].lower() in img_formats] 
+        videos = [x for x in files if os.path.splitext(x)[-1].lower() in vid_formats]
         nI, nV = len(images), len(videos)
 
         self.img_size = img_size
         self.files = images + videos
-        self.nF = nI + nV  # number of files 总共要检测的数目
+        self.nF = nI + nV 
         self.video_flag = [False] * nI + [True] * nV
         self.mode = 'images'
-        self.half = half  # half precision fp16 images
+        self.half = half 
         if any(videos):
-            self.new_video(videos[0])  # new video
+            self.new_video(videos[0]) 
         else:
             self.cap = None
         assert self.nF > 0, 'No images or videos found in ' + path
@@ -80,12 +71,12 @@ class LoadImages:  # for inference
         return self
 
     def __next__(self):
-        # 如果迭代次数等于图片数目，就停止迭代
+
         if self.count == self.nF:
             raise StopIteration
-        path = self.files[self.count] # 得到第self.count张图片路径
+        path = self.files[self.count] 
 
-        if self.video_flag[self.count]: # 如果有视频的话
+        if self.video_flag[self.count]: 
             # Read video
             self.mode = 'video'
             ret_val, img0 = self.cap.read()
@@ -103,23 +94,23 @@ class LoadImages:  # for inference
             print('video %g/%g (%g/%g) %s: ' % (self.count + 1, self.nF, self.frame, self.nframes, path), end='')
 
         else:
-            # 迭代次数加一
+
             self.count += 1
-            # Read image 读取图片
+            # Read image 
             img0 = cv2.imread(path)  # BGR HWC: (1080, 810, 3)
             assert img0 is not None, 'Image Not Found ' + path
             # image 1/2 data/samples/bus.jpg:
             print('image %g/%g %s: ' % (self.count, self.nF, path), end='')
 
         # Padded resize
-        img, *_ = letterbox(img0, new_shape=self.img_size) # img经过padding后的最小输入矩形图: (416, 320, 3)
+        img, *_ = letterbox(img0, new_shape=self.img_size) 
 
         # cv2.imshow('Padded Image', img)
         # cv2.waitKey()
 
         # Normalize RGB
         img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR2RGB  HWC2CHW: (3, 416, 320)
-        # ascontiguousarray函数将一个内存不连续存储的数组转换为内存连续存储的数组，使得运行速度更快。
+
         img = np.ascontiguousarray(img, dtype=np.float16 if self.half else np.float32)  # uint8 to fp16/fp32
         img /= 255.0  # 0 - 255 to 0.0 - 1.0
 
@@ -187,24 +178,14 @@ class LoadWebcam:  # for inference
 class LoadImagesAndLabels(Dataset):  # for training/testing
     def __init__(self, path, img_size=416, batch_size=16, augment=False, hyp=None, rect=True, image_weights=False,
                  cache_images=False):
-        """
 
-        :param path: 得到训练集的ID文件路径 'data/train.txt'
-        :param img_size: 网络输入分辨率 416
-        :param batch_size: 2
-        :param augment: 是否进行数据增广
-        :param hyp: 数据增广的超参数
-        :param rect: 是否采用矩形训练
-        :param image_weights: False
-        :param cache_images: True
-        """
         path = str(Path(path))  # os-agnostic
-        # 读取训练/验证txt文件的内容
+
         with open(path, 'r') as f:
             self.img_files = [x.replace('/', os.sep) for x in f.read().splitlines()  # os-agnostic
                               if os.path.splitext(x)[-1].lower() in img_formats]
 
-        n = len(self.img_files) # 4807 图片的个数
+        n = len(self.img_files)
         bi = np.floor(np.arange(n) / batch_size).astype(np.int)  # batch index [0 0 1 1 2 2...]
         nb = bi[-1] + 1  # number of batches 2404
         assert n > 0, 'No images found in %s' % path
@@ -217,11 +198,9 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
         self.image_weights = image_weights
         self.rect = False if image_weights else rect
 
-        # 将图片与标注对应上，根据train.txt的图片路径得到对应的标注文件路径
-        # 图片的images文件名替换为标注label所在的labels
-        # 图片的后缀遇到.png或者.jpg则替换为标注文件后缀.txt
+
         self.label_files = [x.replace('images', 'labels').replace(os.path.splitext(x)[-1], '.txt')
-                            for x in self.img_files] # 读取train.txt记录的图片路径
+                            for x in self.img_files] 
 
         # Rectangular Training  https://github.com/ultralytics/yolov3/issues/232
         if self.rect:
@@ -267,7 +246,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             for i, file in enumerate(pbar):
                 try:
                     with open(file, 'r') as f: # 'data\\labels\\train\\Inria_319.txt'
-                        l = np.array([x.split() for x in f.read().splitlines()], dtype=np.float32) # 2代表两个目标物体: (2, 5)
+                        l = np.array([x.split() for x in f.read().splitlines()], dtype=np.float32) 
                 except:
                     nm += 1  # print('missing labels for image %s' % self.img_files[i])  # file missing
                     continue
@@ -298,21 +277,19 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
                 pbar.desc = 'Reading labels (%g found, %g missing, %g empty for %g images)' % (nf, nm, ne, n)
             assert nf > 0, 'No labels found. Recommend correcting image and label paths.'
 
-        # Cache images into memory for faster training (~5GB)
-        # imread比较慢，因此这里直接先读取最多10000张图片，大概5GB，加快训练
+
         if cache_images and augment:  # if training
             for i in tqdm(range(min(len(self.img_files), 10000)), desc='Reading images'):  # max 10k images
                 img_path = self.img_files[i]
                 img = cv2.imread(img_path)  # BGR
                 assert img is not None, 'Image Not Found ' + img_path
-                r = self.img_size / max(img.shape)  # size ratio 长边缩放到416的缩放比例
+                r = self.img_size / max(img.shape) 
                 if self.augment and r < 1:  # if training (NOT testing), downsize to inference shape
                     h, w, _ = img.shape
                     img = cv2.resize(img, (int(w * r), int(h * r)), interpolation=cv2.INTER_LINEAR)  # or INTER_AREA
-                self.imgs[i] = img # 将等比例缩放后的图片存进去
+                self.imgs[i] = img 
 
-        # Detect corrupted images https://medium.com/joelthchao/programmatically-detect-corrupted-image-8c1b2006c3d3
-        # 判断图片是否下载下来正常，如果出现异常的图片就打印出来
+
         detect_corrupted_images = False
         if detect_corrupted_images:
             from skimage import io  # conda install -c conda-forge scikit-image
@@ -443,15 +420,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
 
 
 def letterbox(img, new_shape=416, color=(128, 128, 128), mode='auto'):
-    """
-    求得较长边缩放到416的比例，然后对图片wh按这个比例缩放，使得较长边达到416,
-    再对较短边进行填充使得较短边满足32的倍数
-    :param img: 需要处理的原始图片CHW
-    :param new_shape: 网络的输入分辨率
-    :param color: 进行pad时，填充的颜色(值)
-    :param mode:需要进行填充的模式
-    :return: 返回填充后wh都为32倍数的图片
-    """
+
     # Resize a rectangular image to a 32 pixel multiple rectangle
     # https://github.com/ultralytics/yolov3/issues/232
     shape = img.shape[:2]  # current shape [height, width] (1080, 810)
@@ -461,45 +430,34 @@ def letterbox(img, new_shape=416, color=(128, 128, 128), mode='auto'):
     else:
         ratio = max(new_shape) / max(shape)  # ratio  = new / old
     ratiow, ratioh = ratio, ratio
-    # round() 方法返回浮点数x的四舍五入值。
+
     new_unpad = (int(round(shape[1] * ratio)), int(round(shape[0] * ratio))) # WH:(312, 416)
 
     # Compute padding https://github.com/ultralytics/yolov3/issues/232
     if mode is 'auto':
-        # 填充为符合条件的最小矩形minimum rectangle
-        # 使得较长边达到416, 再对较短边进行填充使得较短边满足32的倍数
+
         dw = np.mod(new_shape - new_unpad[0], 32) / 2  # width padding  4.0
         dh = np.mod(new_shape - new_unpad[1], 32) / 2  # height padding 0.0
     elif mode is 'square':  # square
-        # 直接填充为416x416的正方形
+
         dw = (new_shape - new_unpad[0]) / 2  # width padding
         dh = (new_shape - new_unpad[1]) / 2  # height padding
     elif mode is 'rect':  # square
-        # 填充为指定形状new_shape=(320, 416)的矩形
+
         dw = (new_shape[1] - new_unpad[0]) / 2  # width padding
         dh = (new_shape[0] - new_unpad[1]) / 2  # height padding
     elif mode is 'scaleFill':
-        # resize到指定的416x416
+
         dw, dh = 0.0, 0.0
         new_unpad = (new_shape, new_shape)
         ratiow, ratioh = new_shape / shape[1], new_shape / shape[0]
 
     if shape[::-1] != new_unpad:  # new_unpad: (312, 416)
-        # 进行resize
+ 
         img = cv2.resize(img, new_unpad, interpolation=cv2.INTER_AREA)  # INTER_AREA is better, INTER_LINEAR is faster
     top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1)) # 0, 0
     left, right = int(round(dw - 0.1)), int(round(dw + 0.1)) # 4, 4
-    # 为图像扩边（填充）
-    # 想为图像周围建一个边可以使用cv2.copyMakeBorder()函数。这经常在卷积运算或0填充时被用到。具体参数如下：
-    # 5.1 src输入图像
-    # 5.2 top,bottom,left,right对应边界的像素数目
-    # 5.3 borderType要添加哪种类型的边界：
-    # 5.3.1	cv2.BORDER_CONSTANT添加有颜色的常数值边界，还需要下一个参数（value）
-    # 5.3.2	cv2.BORDER_REFLIECT边界元素的镜像。例如：fedcba | abcdefgh | hgfedcb
-    # 5.3.3	cv2.BORDER_101或者cv2.BORDER_DEFAULT跟上面一样，但稍作改动，例如：gfedcb | abcdefgh | gfedcba
-    # 5.3.4	cv2.BORDER_REPLICATE复后一个元素。例如: aaaaaa| abcdefgh|hhhhhhh
-    # 5.3.5	cv2.BORDER_WRAP 不知怎么了, 就像样: cdefgh| abcdefgh|abcdefg
-    # 5.3.6	value边界颜色
+
     img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # add border
     return img, ratiow, ratioh, dw, dh
 

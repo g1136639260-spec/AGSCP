@@ -12,9 +12,9 @@ from .transforms import build_transforms
 from .datasets import Market1501
 
 def make_data_loader(cfg):
-    # 验证集的预处理
+
     val_transforms = build_transforms(cfg)
-    num_workers = cfg.DATALOADER.NUM_WORKERS # 加载图像进程数 8
+    num_workers = cfg.DATALOADER.NUM_WORKERS
     dataset = Market1501(root=cfg.DATASETS.ROOT_DIR)
 
     val_set = ImageDataset(dataset.query, val_transforms)

@@ -1,6 +1,6 @@
 # AGSCP Demo
 
-This repository currently provides an inference demo. The main entry script is `AG_person_search/search-det-seg-AG.py`. The script connects four stages into one pipeline: aerial detection, query construction, ground-view person search, and segmentation visualization. The final outputs include a detection video, ReID query images, person-search results, and a segmentation video.
+This repository currently provides an inference demo. The main entry script is `AGSCP-inference/search-det-seg-AG.py`. The script connects four stages into one pipeline: aerial detection, query construction, ground-view person search, and segmentation visualization. The final outputs include a detection video, ReID query images, person-search results, and a segmentation video.
 
 ## 1. Before You Run
 
@@ -27,7 +27,7 @@ These versions were selected based on the API usage in the current codebase. The
 
 ## 3. Demo Pipeline
 
-`AG_person_search/search-det-seg-AG.py` runs the following stages:
+`AGSCP-inference/search-det-seg-AG.py` runs the following stages:
 
 1. Aerial detection: read an aerial-view video or image and save the detection visualization result.
 2. Query construction: manually crop the target from a selected video and save the crop or crops as ReID query images.

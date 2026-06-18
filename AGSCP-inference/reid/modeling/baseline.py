@@ -14,14 +14,7 @@ class Baseline(nn.Module):
     in_planes = 2048
 
     def __init__(self, num_classes, model_name, model_path, last_stride=1):
-        """
-        :param num_classes: 10126 训练的行人ID类别数目
-        :param model_name: 'resnet50_ibn_a'
-        :param model_path: 预训练模型路径 '/home/common/wangsong/weights/r50_ibn_a.pth'
-        :param last_stride: 1 取消最后的下采样
-        :param neck: 使用'bnneck'
-        :param neck_feat: 'after'
-        """
+
 
         super(Baseline, self).__init__()
         if model_name == 'resnet18':
